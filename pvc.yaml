@@ -1,0 +1,4 @@
+# Removed unused standalone PersistentVolumeClaim `mssql-pvc`.
+# Storage for the SQL Server StatefulSet is provisioned by its
+# `volumeClaimTemplates`, so keeping this manifest would create a
+# redundant and potentially confusing PVC.

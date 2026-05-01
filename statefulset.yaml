@@ -1,0 +1,59 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: sql-server
+  name: mssql-headless
+spec:
+  clusterIP: None
+  selector:
+    app: mssql
+  ports:
+    - port: 1433
+      targetPort: 1433
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: sql-server
+  name: mssql
+spec:
+  serviceName: "mssql-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mssql
+  template:
+    metadata:
+      labels:
+        app: mssql
+    spec:
+      securityContext:
+        runAsUser: 10001        # SQL Server container user
+        fsGroup: 10001          # Ensures PVC is writable by SQL Server
+      containers:
+        - name: mssql
+          image: mcr.microsoft.com/mssql/server:2022-latest
+          ports:
+            - containerPort: 1433
+          env:
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: MSSQL_SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mssql-secret
+                  key: SA_PASSWORD
+          volumeMounts:
+            - name: mssql-data
+              mountPath: /var/opt/mssql
+  volumeClaimTemplates:
+    - metadata:
+        name: mssql-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: default
+        resources:
+          requests:
+            storage: 10Gi
+
