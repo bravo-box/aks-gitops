@@ -9,7 +9,7 @@ metadata:
     app: mssql
 spec:
   type: LoadBalancer
-  loadBalancerIP: 10.1.0.225
+  loadBalancerIP: 10.1.0.226
   ports:
     - port: 1433
       targetPort: 1433
