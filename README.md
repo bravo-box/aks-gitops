@@ -1,6 +1,6 @@
 # AKS GitOps Quickstart
 
-This repository contains a simple SQL Server implementation for Kubernetes, designed to demonstrate a GitOps workflow. This general 
+This repository contains a simple SQL Server implementation for Kubernetes, designed to demonstrate a GitOps workflow. The philosophy here is the git is the source of truth for your application / deployment needs. You manage your state and deployment in a single place and then monitor to ensure there is no configuration drift.
 
 In this quickstart, Azure Kubernetes Service (AKS) is used as the development and validation environment before promotion to an edge environment running Azure Local with Arc-enabled Kubernetes.
 
