@@ -5,7 +5,7 @@ metadata:
   name: mssql
 spec:
   serviceName: "mssql"
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: mssql
