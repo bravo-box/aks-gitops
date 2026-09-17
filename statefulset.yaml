@@ -16,10 +16,11 @@ spec:
     spec:
       securityContext:
         runAsUser: 10001        # SQL Server container user
+        runAsNonRoot: true      # Ensures the container runs as a non-root user
         fsGroup: 10001          # Ensures PVC is writable by SQL Server
       containers:
         - name: mssql
-          image: mcr.microsoft.com/mssql/server:2022-latest
+          image: mcr.microsoft.com/mssql/server:2025-latest
           ports:
             - containerPort: 1433
           env:
