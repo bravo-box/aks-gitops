@@ -24,7 +24,8 @@ public class KubernetesClusterInfoService
         }
 
         var token = (await File.ReadAllTextAsync(tokenPath)).Trim();
-        using var caCert = X509Certificate2.CreateFromPemFile(caCertPath);
+        // ca.crt has no private key — CreateFromPemFile expects one and throws; use the cert-only loader.
+        using var caCert = X509CertificateLoader.LoadCertificateFromFile(caCertPath);
 
         using var handler = new HttpClientHandler
         {
