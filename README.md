@@ -1,8 +1,8 @@
 # AKS GitOps Quickstart
 
-This repository contains a simple SQL Server implementation for Kubernetes, designed to demonstrate a GitOps workflow. The philosophy here is the git is the source of truth for your application / deployment needs. You manage your state and deployment in a single place and then monitor to ensure there is no configuration drift.
+This repository contains a simple SQL Server implementation for Kubernetes, and a Blazor web app designed to demonstrate a GitOps workflow. The philosophy here is the git is the source of truth for your application / deployment needs. You manage your state and deployment in a single place and then monitor to ensure there is no configuration drift.
 
-In this quickstart, Azure Kubernetes Service (AKS) is used as the development and validation environment before promotion to an edge environment running Azure Local with Arc-enabled Kubernetes.
+In this quickstart, Azure Kubernetes Service (AKS) is used as the development and validation environment before promotion to an edge environment running Azure Local with Arc-enabled Kubernetes. The gitops configuration can be deployed to both AKS and AKS on Azure Local.
 
 In this scenario the assumption is that SQL Server must run at the edge, where stability is critical. To reduce risk, changes are first built and tested in AKS, then pushed to the edge only after validation and approval within git.
 
@@ -130,10 +130,47 @@ kubectl -n sql-server get pvc
 kubectl -n sql-server get svc mssql
 ```
 
-## Notes
-
-This is the key GitOps flow for this quickstart: test in Azure AKS first, then deploy live to Azure Local AKS using the same kustomization-driven manifests.
 
 
 - The current secret in `sql-server-flux/sql-secret.yaml` is for demo use. Replace it with a strong password and a secure secret-management workflow for real environments.
 - `sql-server-flux/service.yaml` is intentionally `ClusterIP`, not `LoadBalancer` — SQL Server should not be reachable outside the cluster; the webapp is the only sanctioned access path.
+
+## Monitoring
+
+With a large estate Log Analytics comes into play to understand compliance state of your workloads which are being deployed through GitOps. In Azure Resource Graph Explorer or if you had a workbook, you can query the Compliance State.
+
+```kql
+// This kql query will return Flux configurations, compliance and associated repos.
+
+resources
+| where type =~ 'Microsoft.Kubernetes/connectedClusters'
+   or type =~ 'Microsoft.ContainerService/managedClusters'
+| extend clusterId = tolower(id)
+| project clusterId, clusterName=name, subscriptionId, resourceGroup, location, clusterType=type
+| join kind=leftouter (
+    KubernetesConfigurationResources
+    | where type =~ 'microsoft.kubernetesconfiguration/fluxconfigurations'
+    | parse tolower(id) with clusterId '/providers/microsoft.kubernetesconfiguration/fluxconfigurations' *
+    | project
+        clusterId,
+        fluxName=name,
+        fluxCompliance=tostring(properties.complianceState),
+        provisioningState=tostring(properties.provisioningState),
+        fluxRepo=tostring(properties.gitRepository.url)
+) on clusterId
+| project
+    subscriptionId,
+    resourceGroup,
+    clusterName,
+    clusterType,
+    location,
+    fluxName,
+    fluxCompliance,
+    provisioningState,
+    fluxRepo
+| order by clusterName asc
+```
+
+## Notes
+
+This is the key GitOps flow for this quickstart: test in Azure AKS first, then deploy live to Azure Local AKS using the same kustomization-driven manifests.
