@@ -8,4 +8,4 @@ resources:
 images:
   - name: webapp
     newName: betanet.azurecr.us/webapp # replace with your registry/image
-    newTag: "318b0b1" # git short SHA — bump this on every image push so Flux detects a manifest diff
+    newTag: "3efbb7e" # git short SHA — bump this on every image push so Flux detects a manifest diff
