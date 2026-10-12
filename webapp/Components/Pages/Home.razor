@@ -1,12 +1,13 @@
 @page "/"
 @rendermode InteractiveServer
 @inject WebApp.Services.DatabaseService DbService
+@inject WebApp.Services.KubernetesClusterInfoService ClusterInfo
 @inject IConfiguration Configuration
 
 <h1>SQL Server Connection Test</h1>
 
 <p>
-    <strong>Cluster:</strong> @(Configuration["CLUSTER_NAME"] ?? "unknown")<br />
+    <strong>Kubernetes API Server:</strong> @(apiServerVersion ?? "checking...")<br />
     <strong>Node:</strong> @(Configuration["NODE_NAME"] ?? "unknown")
 </p>
 
@@ -30,9 +31,11 @@ else
     private bool? status;
     private string? serverVersion;
     private string? errorMessage;
+    private string? apiServerVersion;
 
     protected override async Task OnInitializedAsync()
     {
+        apiServerVersion = await ClusterInfo.GetApiServerVersionAsync();
         await CheckConnection();
     }
 

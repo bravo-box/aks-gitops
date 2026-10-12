@@ -34,9 +34,6 @@ spec:
                 secretKeyRef:
                   name: mssql-secret
                   key: MSSQL_SA_PASSWORD
-            # Manually set per-environment when promoting (e.g. "betanet-ent", "azure-local-edge").
-            - name: CLUSTER_NAME
-              value: "betanet-ent"
             - name: NODE_NAME
               valueFrom:
                 fieldRef:

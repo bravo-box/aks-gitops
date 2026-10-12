@@ -7,6 +7,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddSingleton<DatabaseService>();
+builder.Services.AddSingleton<KubernetesClusterInfoService>();
 
 var app = builder.Build();
 
