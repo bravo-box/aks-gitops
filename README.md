@@ -16,18 +16,20 @@ GitOps is configured so Azure watches the `dev` branch and the edge environment 
 2. Test it in AKS.
 3. Promote the same manifests to a live Azure Local Arc-enabled kubernetes environment.
 
-The same `kustomization.yaml` is the core deployment unit across environments, which makes promotion predictable and repeatable.
+Each folder below is its own `kustomization.yaml` sync unit, which makes promotion predictable and repeatable, and lets Flux apply them in dependency order (namespace → SQL Server / ACR pull secret → webapp).
 
 ## What Is In This Repo
 
-- `namespace.yaml`: Creates the `sql-server` namespace.
-- `secret.yaml`: Provides the SQL Server SA password secret.
-- `statefulset.yaml`: Deploys SQL Server 2025 as a `StatefulSet` with persistent storage.
-- `service.yaml`: Exposes SQL Server on port 1433 as a `ClusterIP` service (no external IP), providing only the in-cluster `mssql` DNS name the webapp connects to. It must stay part of the kustomization — without it, nothing in the `sql-server` namespace can resolve `mssql`.
-- `kustomization.yaml`: Defines which manifests are included in the SQL Server deployment set as part of the GitOps process.
-- `webapp/`: A simple .NET 10 Blazor Server app that connects to the SQL Server instance and reports connection status. See `webapp/README` section below for build instructions.
-- `webapp-deployment.yaml` / `webapp-service.yaml`: Deploys the webapp container and exposes it via a `LoadBalancer` service on port 80.
-- `kustomization_app.yaml`: A second, independent Kustomization that deploys only the webapp resources into the `sql-server` namespace created by `kustomization.yaml`.
+- `namespace-flux/`: Creates the `sql-server` namespace (`namespace.yaml`). Every other Kustomization depends on this one.
+- `sql-server-flux/`: Deploys SQL Server.
+  - `sql-secret.yaml`: Provides the SQL Server SA password secret.
+  - `statefulset.yaml`: Deploys SQL Server 2025 as a `StatefulSet` with persistent storage.
+  - `service.yaml`: Exposes SQL Server on port 1433 as a `ClusterIP` service (no external IP), providing only the in-cluster `mssql` DNS name the webapp connects to.
+- `acr-pull-flux/`: Provides `acr-pull-secret.yaml`, the `dockerconfigjson` Secret the webapp uses to pull its image from ACR. See [Web App](#web-app) below for how to populate it — the committed file is a placeholder, not real credentials.
+- `web-flux/`: Deploys the webapp.
+  - `webapp-deployment.yaml` / `webapp-service.yaml`: Deploys the webapp container and exposes it via a `LoadBalancer` service on port 80.
+  - `kustomization.yaml`: Includes an `images:` transformer so you can point at your registry without editing the Deployment directly.
+- `webapp/`: Source for a simple .NET 10 Blazor Server app that connects to the SQL Server instance and reports connection status. See [Web App](#web-app) below for build instructions.
 
 ## Web App
 
@@ -45,9 +47,29 @@ docker push betanet.azurecr.us/webapp:latest
 
 > **Note:** always pass `--platform linux/amd64` when building on Apple Silicon (M-series) Macs. Without it, Docker builds for your Mac's native `arm64`, which will fail to run on AKS's `amd64` nodes (`exec format error`). Docker Desktop's bundled QEMU emulation builds `linux/amd64` correctly, just slower than a native build.
 
-Update the `newName` value under `images:` in `kustomization_app.yaml` to point at your registry/image.
+Update the `newName` value under `images:` in `web-flux/kustomization.yaml` to point at your registry/image.
 
-> **Note:** `kubectl apply -k` and Flux's kustomize-controller only auto-discover a file literally named `kustomization.yaml`/`kustomization.yml`. To let GitOps apply `kustomization_app.yaml` automatically as its own sync unit, put it in its own folder (e.g. `app/kustomization.yaml` containing the same content) and point the second GitOps Kustomization's **Path** at that folder, with **Depends On** set to the first (database) Kustomization so the app only deploys after SQL Server is up. Until then, you can apply it manually with `kubectl apply -f webapp-deployment.yaml -f webapp-service.yaml`.
+### ACR pull secret
+
+`acr-pull-flux/acr-pull-secret.yaml` is committed as a placeholder only — never commit real ACR credentials to git. Two options:
+
+- **Recommended:** skip the secret entirely and attach ACR to AKS via managed identity, which grants the cluster's kubelet identity `AcrPull` with nothing to store or rotate:
+  ```bash
+  az aks update --name <aks-cluster-name> --resource-group <rg> --attach-acr <acr-name>
+  ```
+  Then remove `imagePullSecrets` from `web-flux/webapp-deployment.yaml` and drop `acr-pull-flux` from your GitOps config.
+- **Otherwise:** generate and apply the real secret directly against the cluster (not through git):
+  ```bash
+  kubectl create secret docker-registry acr-pull-secret \
+    --namespace sql-server \
+    --docker-server=betanet.azurecr.us \
+    --docker-username=<ACR_USERNAME> \
+    --docker-password=<ACR_PASSWORD_OR_TOKEN> \
+    --dry-run=client -o yaml | kubectl apply -f -
+  ```
+  If you do this, remove `acr-pull-flux` from GitOps sync so it doesn't overwrite the real secret with the placeholder.
+
+`imagePullSecrets` only resolves Secrets in the same namespace as the Pod — there's no cross-namespace reference, which is why the placeholder is scoped to `sql-server` to match where the webapp runs.
 
 ## Prerequisites
 
@@ -62,12 +84,15 @@ Update the `newName` value under `images:` in `kustomization_app.yaml` to point 
 3) In AKS under `settings` select `GitOps` then `Create`
 4) Enter your `Configuration Name` enter the name of the `Namepace` for this example we will use `sql-server`, set the scope to `Namespace`, select **Next**
 5) In the source select your source that you used for your code, for this quickstart we will use `Git Repository`, enter the url and set the reference type. We will use `Branch` and then set the branch name, as this is AKS and our dev environment set the branch name to `dev`. Enter the connection details to your Repository type. Leave the remaining Sync Configuration as is.
-6) Here we create a new Kustomization. Give it a `Instance Name` and the path to the artifacts, eg: `blank` if in the root or `/sql` if in a sql folder.
-7) Leave the sync settings for now, select `Prune` and `Force`. Prune will remove objects if removed from the code, and force will recreate objects if needed. We dont have any Depends on Kustomizations, however in future deployments you can have dependencies in place to ensure applications work correctly.
+6) Create one GitOps Kustomization per folder, each with its **Path** pointed at that folder (e.g. `/namespace-flux`, `/sql-server-flux`, `/acr-pull-flux`, `/web-flux`) and set **Depends On** so they apply in order:
+   - `namespace-flux` — no dependency, applies first.
+   - `sql-server-flux` and `acr-pull-flux` — depend on `namespace-flux`.
+   - `web-flux` — depends on `sql-server-flux` and `acr-pull-flux`, so the webapp only deploys once SQL Server and the pull secret are ready.
+7) Leave the sync settings for now, select `Prune` and `Force`. Prune will remove objects if removed from the code, and force will recreate objects if needed.
 
 NOTE: now that this has been created you will see the GitOps status screen with the Kustomizations and a compliance and State status.
 
-If you go into the configuration and take a look at the Configuration Objects you should see 2 objects: `sql-server` and `sql-server-dev`, one being a GitRepository and the other the Kustomization. Both should be in a Compliant State ![check](https://img.shields.io/badge/-✔-brightgreen?style=flat-circle).
+If you go into the configuration and take a look at the Configuration Objects you should see one `GitRepository` object plus one `Kustomization` object per folder above. All should be in a Compliant State ![check](https://img.shields.io/badge/-✔-brightgreen?style=flat-circle).
 
 ### Check rollout and runtime status
 
@@ -110,5 +135,5 @@ kubectl -n sql-server get svc mssql
 This is the key GitOps flow for this quickstart: test in Azure AKS first, then deploy live to Azure Local AKS using the same kustomization-driven manifests.
 
 
-- The current secret in `secret.yaml` is for demo use. Replace it with a strong password and a secure secret-management workflow for real environments.
-- `service.yaml` is intentionally `ClusterIP`, not `LoadBalancer` — SQL Server should not be reachable outside the cluster; the webapp is the only sanctioned access path.
+- The current secret in `sql-server-flux/sql-secret.yaml` is for demo use. Replace it with a strong password and a secure secret-management workflow for real environments.
+- `sql-server-flux/service.yaml` is intentionally `ClusterIP`, not `LoadBalancer` — SQL Server should not be reachable outside the cluster; the webapp is the only sanctioned access path.

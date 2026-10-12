@@ -1,8 +1,14 @@
 @page "/"
 @rendermode InteractiveServer
 @inject WebApp.Services.DatabaseService DbService
+@inject IConfiguration Configuration
 
 <h1>SQL Server Connection Test</h1>
+
+<p>
+    <strong>Cluster:</strong> @(Configuration["CLUSTER_NAME"] ?? "unknown")<br />
+    <strong>Node:</strong> @(Configuration["NODE_NAME"] ?? "unknown")
+</p>
 
 @if (status is null)
 {
