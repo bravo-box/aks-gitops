@@ -23,7 +23,7 @@ The same `kustomization.yaml` is the core deployment unit across environments, w
 - `namespace.yaml`: Creates the `sql-server` namespace.
 - `secret.yaml`: Provides the SQL Server SA password secret.
 - `statefulset.yaml`: Deploys SQL Server 2025 as a `StatefulSet` with persistent storage.
-- `service.yaml`: Exposes SQL Server on port 1433 with a `LoadBalancer` service. **Note this is NOT part of the kustomization**.
+- `service.yaml`: Exposes SQL Server on port 1433 as a `ClusterIP` service (no external IP), providing only the in-cluster `mssql` DNS name the webapp connects to. It must stay part of the kustomization — without it, nothing in the `sql-server` namespace can resolve `mssql`.
 - `kustomization.yaml`: Defines which manifests are included in the SQL Server deployment set as part of the GitOps process.
 - `webapp/`: A simple .NET 10 Blazor Server app that connects to the SQL Server instance and reports connection status. See `webapp/README` section below for build instructions.
 - `webapp-deployment.yaml` / `webapp-service.yaml`: Deploys the webapp container and exposes it via a `LoadBalancer` service on port 80.
@@ -78,7 +78,7 @@ kubectl -n sql-server get statefulset mssql
 kubectl -n sql-server get pvc
 ```
 
-If `service.yaml` is included in `kustomization.yaml`, verify external connectivity:
+Verify the service (no `EXTERNAL-IP` is expected — SQL Server is only reachable in-cluster, via the webapp):
 
 ```bash
 kubectl -n sql-server get svc mssql
@@ -111,4 +111,4 @@ This is the key GitOps flow for this quickstart: test in Azure AKS first, then d
 
 
 - The current secret in `secret.yaml` is for demo use. Replace it with a strong password and a secure secret-management workflow for real environments.
-- `service.yaml` currently specifies a fixed `loadBalancerIP`. Ensure that IP is valid and routable in your target environment. It is not included in the kustomization.
+- `service.yaml` is intentionally `ClusterIP`, not `LoadBalancer` — SQL Server should not be reachable outside the cluster; the webapp is the only sanctioned access path.

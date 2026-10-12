@@ -8,8 +8,7 @@ metadata:
   labels:
     app: mssql
 spec:
-  type: LoadBalancer
-  loadBalancerIP: 10.1.0.226
+  type: ClusterIP
   ports:
     - port: 1433
       targetPort: 1433

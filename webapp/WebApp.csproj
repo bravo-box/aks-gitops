@@ -4,7 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Microsoft.Data.SqlClient needs ICU for collation handling; invariant mode breaks it. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
