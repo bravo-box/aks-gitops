@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: sql-server
+  name: webapp
+  labels:
+    app: webapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+        - name: webapp
+          image: webapp:latest # overridden by the images: transformer in kustomization_app.yaml
+          ports:
+            - containerPort: 8080
+          env:
+            - name: Db__Server
+              value: "mssql,1433"
+            - name: Db__Database
+              value: "master"
+            - name: Db__User
+              value: "sa"
+            - name: Db__Password
+              valueFrom:
+                secretKeyRef:
+                  name: mssql-secret
+                  key: MSSQL_SA_PASSWORD

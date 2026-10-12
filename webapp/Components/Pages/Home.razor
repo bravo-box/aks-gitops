@@ -1,0 +1,48 @@
+@page "/"
+@rendermode InteractiveServer
+@inject WebApp.Services.DatabaseService DbService
+
+<h1>SQL Server Connection Test</h1>
+
+@if (status is null)
+{
+    <p>Checking connection...</p>
+}
+else if (status == true)
+{
+    <p style="color: green;">Connected successfully.</p>
+    <pre style="white-space: pre-wrap;">@serverVersion</pre>
+}
+else
+{
+    <p style="color: red;">Connection failed: @errorMessage</p>
+}
+
+<button @onclick="CheckConnection">Re-check connection</button>
+
+@code {
+    private bool? status;
+    private string? serverVersion;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckConnection();
+    }
+
+    private async Task CheckConnection()
+    {
+        status = null;
+        StateHasChanged();
+        try
+        {
+            serverVersion = await DbService.GetServerVersionAsync();
+            status = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            status = false;
+        }
+    }
+}

@@ -22,9 +22,32 @@ The same `kustomization.yaml` is the core deployment unit across environments, w
 
 - `namespace.yaml`: Creates the `sql-server` namespace.
 - `secret.yaml`: Provides the SQL Server SA password secret.
-- `statefulset.yaml`: Deploys SQL Server 2022 as a `StatefulSet` with persistent storage.
+- `statefulset.yaml`: Deploys SQL Server 2025 as a `StatefulSet` with persistent storage.
 - `service.yaml`: Exposes SQL Server on port 1433 with a `LoadBalancer` service. **Note this is NOT part of the kustomization**.
-- `kustomization.yaml`: Defines which manifests are included in the deployment set as part of the GitOps process.
+- `kustomization.yaml`: Defines which manifests are included in the SQL Server deployment set as part of the GitOps process.
+- `webapp/`: A simple .NET 10 Blazor Server app that connects to the SQL Server instance and reports connection status. See `webapp/README` section below for build instructions.
+- `webapp-deployment.yaml` / `webapp-service.yaml`: Deploys the webapp container and exposes it via a `LoadBalancer` service on port 80.
+- `kustomization_app.yaml`: A second, independent Kustomization that deploys only the webapp resources into the `sql-server` namespace created by `kustomization.yaml`.
+
+## Web App
+
+The `webapp/` folder contains a minimal Blazor Server app (`Microsoft.Data.SqlClient`) that opens a connection to the `mssql` service and runs `SELECT @@VERSION`, showing success/failure on the home page.
+
+The SA password is never duplicated in a connection string secret — the app reads `Db__Server`, `Db__Database`, `Db__User` as plain env vars and `Db__Password` via `secretKeyRef` from the existing `mssql-secret`, then builds the connection string in code.
+
+### Build and push the image
+
+```bash
+cd webapp
+docker build --platform linux/amd64 -t betanet.azurecr.us/webapp:latest .
+docker push betanet.azurecr.us/webapp:latest
+```
+
+> **Note:** always pass `--platform linux/amd64` when building on Apple Silicon (M-series) Macs. Without it, Docker builds for your Mac's native `arm64`, which will fail to run on AKS's `amd64` nodes (`exec format error`). Docker Desktop's bundled QEMU emulation builds `linux/amd64` correctly, just slower than a native build.
+
+Update the `newName` value under `images:` in `kustomization_app.yaml` to point at your registry/image.
+
+> **Note:** `kubectl apply -k` and Flux's kustomize-controller only auto-discover a file literally named `kustomization.yaml`/`kustomization.yml`. To let GitOps apply `kustomization_app.yaml` automatically as its own sync unit, put it in its own folder (e.g. `app/kustomization.yaml` containing the same content) and point the second GitOps Kustomization's **Path** at that folder, with **Depends On** set to the first (database) Kustomization so the app only deploys after SQL Server is up. Until then, you can apply it manually with `kubectl apply -f webapp-deployment.yaml -f webapp-service.yaml`.
 
 ## Prerequisites
 
