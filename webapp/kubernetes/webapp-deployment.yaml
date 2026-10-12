@@ -15,6 +15,8 @@ spec:
       labels:
         app: webapp
     spec:
+      imagePullSecrets:
+        - name: acr-pull-secret
       containers:
         - name: webapp
           image: webapp:latest # overridden by the images: transformer in kustomization_app.yaml
