@@ -7,7 +7,15 @@
 <h1>SQL Server Connection Test</h1>
 
 <p>
-    <strong>Kubernetes API Server:</strong> @(apiServerVersion ?? "checking...")<br />
+    <strong>Kubernetes API Server:</strong> @(apiServer?.GitVersion ?? "checking...") @(apiServer?.Platform is { } pl ? $"({pl})" : "")<br />
+    @if (apiServer?.BuildDate is not null)
+    {
+        <text><strong>Build Date:</strong> @apiServer.BuildDate<br /></text>
+    }
+    @if (apiServer?.GoVersion is not null)
+    {
+        <text><strong>Go Version:</strong> @apiServer.GoVersion<br /></text>
+    }
     <strong>Node:</strong> @(Configuration["NODE_NAME"] ?? "unknown")
 </p>
 
@@ -19,6 +27,14 @@ else if (status == true)
 {
     <p style="color: green;">Connected successfully.</p>
     <pre style="white-space: pre-wrap;">@serverVersion</pre>
+    @if (sqlIdentity is not null)
+    {
+        <p>
+            <strong>SQL Server Name:</strong> @sqlIdentity.ServerName<br />
+            <strong>SQL Machine Name:</strong> @sqlIdentity.MachineName<br />
+            <strong>SQL Database GUID (unique ID):</strong> @sqlIdentity.DatabaseGuid
+        </p>
+    }
 }
 else
 {
@@ -31,11 +47,12 @@ else
     private bool? status;
     private string? serverVersion;
     private string? errorMessage;
-    private string? apiServerVersion;
+    private ApiServerInfo? apiServer;
+    private SqlServerIdentity? sqlIdentity;
 
     protected override async Task OnInitializedAsync()
     {
-        apiServerVersion = await ClusterInfo.GetApiServerVersionAsync();
+        apiServer = await ClusterInfo.GetApiServerVersionAsync();
         await CheckConnection();
     }
 
@@ -46,6 +63,7 @@ else
         try
         {
             serverVersion = await DbService.GetServerVersionAsync();
+            sqlIdentity = await DbService.GetServerIdentityAsync();
             status = true;
         }
         catch (Exception ex)

@@ -11,7 +11,7 @@ public class KubernetesClusterInfoService
 {
     private const string ServiceAccountDir = "/var/run/secrets/kubernetes.io/serviceaccount";
 
-    public async Task<string> GetApiServerVersionAsync()
+    public async Task<ApiServerInfo> GetApiServerVersionAsync()
     {
         var host = Environment.GetEnvironmentVariable("KUBERNETES_SERVICE_HOST");
         var port = Environment.GetEnvironmentVariable("KUBERNETES_SERVICE_PORT");
@@ -20,7 +20,7 @@ public class KubernetesClusterInfoService
 
         if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(port) || !File.Exists(tokenPath))
         {
-            return "not running in-cluster";
+            return new ApiServerInfo("not running in-cluster", null, null, null);
         }
 
         var token = (await File.ReadAllTextAsync(tokenPath)).Trim();
@@ -52,9 +52,15 @@ public class KubernetesClusterInfoService
         response.EnsureSuccessStatusCode();
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var gitVersion = doc.RootElement.GetProperty("gitVersion").GetString();
-        var platform = doc.RootElement.TryGetProperty("platform", out var p) ? p.GetString() : null;
+        var root = doc.RootElement;
+        string? Get(string name) => root.TryGetProperty(name, out var v) ? v.GetString() : null;
 
-        return platform is null ? gitVersion ?? "unknown" : $"{gitVersion} ({platform})";
+        return new ApiServerInfo(
+            Get("gitVersion") ?? "unknown",
+            Get("platform"),
+            Get("buildDate"),
+            Get("goVersion"));
     }
 }
+
+public record ApiServerInfo(string GitVersion, string? Platform, string? BuildDate, string? GoVersion);
